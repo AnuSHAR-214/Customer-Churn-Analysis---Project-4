@@ -79,6 +79,4 @@ Customer_Churn_Project
 
 ---
 
-## Author
 
-*Add your name, LinkedIn, and GitHub profile here.*
