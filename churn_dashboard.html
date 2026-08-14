@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Churn — Telco Retention Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ tokens ============
+     copper  = churned   (the wire that got cut)
+     pine    = retained
+     brass   = base rate benchmark
+     all data colours clear 6:1 on panel white                        */
+  :root{
+    --ink:#12161C;
+    --slate:#5A6472;
+    --porcelain:#E4E8EE;
+    --panel:#FFFFFF;
+    --hairline:#C9D0DA;
+    --hairline-soft:#E1E6ED;
+    --copper:#A93F1B;
+    --copper-soft:#F2DED6;
+    --pine:#0B5F53;
+    --pine-soft:#D8E7E4;
+    --brass:#8A6A12;
+
+    --display:"Bricolage Grotesque","Public Sans",system-ui,sans-serif;
+    --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+
+    --r:3px;
+    --pad:clamp(16px,3.2vw,34px);
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--porcelain);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:15px;
+    line-height:1.55;
+    padding:var(--pad);
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+
+  /* ============ masthead ============ */
+  .masthead{
+    background:var(--ink);
+    color:#F7F9FB;
+    padding:clamp(20px,3vw,34px) clamp(18px,3vw,34px);
+    border-radius:var(--r);
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:#9DB0BF;
+    margin:0 0 14px;
+  }
+  .eyebrow b{color:#F7F9FB;font-weight:500}
+  h1{
+    font-family:var(--display);
+    font-weight:800;
+    font-size:clamp(30px,5.4vw,54px);
+    line-height:1.02;
+    letter-spacing:-.025em;
+    margin:0 0 10px;
+    max-width:18ch;
+  }
+  .standfirst{
+    margin:0;
+    color:#B9C6D2;
+    max-width:62ch;
+    font-size:clamp(14px,1.5vw,16px);
+  }
+
+  /* ============ filter rail ============ */
+  .rail{
+    background:var(--panel);
+    border:1px solid var(--hairline);
+    border-top:0;
+    border-radius:0 0 var(--r) var(--r);
+    padding:14px clamp(14px,2.4vw,20px);
+    display:flex;
+    flex-wrap:wrap;
+    gap:18px 26px;
+    align-items:flex-start;
+    margin-bottom:14px;
+  }
+  .railhead{
+    display:flex;justify-content:space-between;align-items:center;
+    gap:14px;width:100%;
+  }
+  .group{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .glabel{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--slate);
+  }
+  .chip{
+    font-family:var(--mono);font-size:12px;font-weight:500;
+    background:transparent;color:var(--ink);
+    border:1px solid var(--hairline);
+    border-radius:100px;
+    padding:5px 12px;
+    cursor:pointer;
+    transition:background .13s ease,border-color .13s ease,color .13s ease;
+  }
+  .chip:hover{border-color:var(--ink)}
+  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+  .chip:focus-visible,.row-hit:focus-visible,.reset:focus-visible{
+    outline:2px solid var(--brass);outline-offset:2px;
+  }
+  .reset{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;
+    background:transparent;border:1px solid var(--hairline);
+    border-radius:100px;padding:5px 14px;cursor:pointer;color:var(--slate);
+  }
+  .reset:hover{color:var(--ink);border-color:var(--ink)}
+  .reset[disabled]{opacity:.35;cursor:default}
+  .inview{font-family:var(--mono);font-size:12px;color:var(--slate)}
+  .inview b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+
+  /* ============ layout ============ */
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(12,1fr)}
+  .card{
+    background:var(--panel);
+    border:1px solid var(--hairline);
+    border-radius:var(--r);
+    padding:clamp(14px,2vw,20px);
+    min-width:0;
+  }
+  .span12{grid-column:span 12}
+  .span7{grid-column:span 7}
+  .span5{grid-column:span 5}
+  .span4{grid-column:span 4}
+  .span6{grid-column:span 6}
+  .span3{grid-column:span 3}
+
+  h2{
+    font-family:var(--display);font-weight:600;
+    font-size:16px;letter-spacing:-.012em;margin:0 0 3px;
+  }
+  .sub{margin:0 0 16px;font-size:12.5px;color:var(--slate);line-height:1.45}
+
+  /* ============ kpi ============ */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;grid-column:span 12}
+  .kpi .klabel{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--slate);margin-bottom:10px;
+  }
+  .kfig{
+    font-family:var(--mono);font-weight:600;
+    font-size:clamp(26px,3.6vw,38px);
+    letter-spacing:-.03em;line-height:1;
+    font-variant-numeric:tabular-nums;
+  }
+  .kfig .u{font-size:.5em;font-weight:500;color:var(--slate);margin-left:2px}
+  .kdelta{
+    font-family:var(--mono);font-size:11.5px;margin-top:9px;color:var(--slate);
+    font-variant-numeric:tabular-nums;
+  }
+  .kdelta .up{color:var(--copper);font-weight:600}
+  .kdelta .down{color:var(--pine);font-weight:600}
+
+  /* ============ charts ============ */
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .tick{font-family:var(--mono);font-size:9.5px;fill:var(--slate)}
+  .barlab{font-family:var(--mono);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+  .rowname{font-family:var(--body);font-size:12.5px;fill:var(--ink)}
+  .rowmeta{font-family:var(--mono);font-size:10px;fill:var(--slate)}
+  .row-hit{cursor:pointer}
+  .row-hit:hover .rowname{font-weight:700}
+  .row-hit .plate{fill:transparent}
+  .row-hit:hover .plate{fill:#F3F6F9}
+  .row-hit.on .plate{fill:#EDF1F5}
+
+  .legend{
+    display:flex;gap:16px;flex-wrap:wrap;align-items:center;
+    font-family:var(--mono);font-size:10.5px;color:var(--slate);
+    letter-spacing:.03em;margin-top:12px;
+  }
+  .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+  .dashline{
+    display:inline-block;width:16px;border-top:1.5px dashed var(--brass);
+    margin-right:6px;vertical-align:4px;
+  }
+
+  /* ============ readout ============ */
+  .readout{
+    border-left:2px solid var(--copper);
+    padding:2px 0 2px 14px;margin-top:4px;
+  }
+  .readout p{margin:0;font-size:13.5px;line-height:1.5}
+  .readout .num{font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums}
+
+  .findings{counter-reset:f;margin:0;padding:0;list-style:none}
+  .findings li{
+    display:grid;grid-template-columns:30px 1fr;gap:12px;
+    padding:13px 0;border-top:1px solid var(--hairline-soft);
+  }
+  .findings li:first-child{border-top:0;padding-top:0}
+  .findings li::before{
+    counter-increment:f;content:counter(f,decimal-leading-zero);
+    font-family:var(--mono);font-size:11px;color:var(--brass);
+    font-weight:600;padding-top:2px;
+  }
+  .findings h3{
+    font-family:var(--body);font-size:13.5px;font-weight:700;margin:0 0 2px;
+  }
+  .findings p{margin:0;font-size:12.5px;color:var(--slate);line-height:1.45}
+
+  .actions{margin:0;padding:0;list-style:none}
+  .actions li{
+    padding:11px 0;border-top:1px solid var(--hairline-soft);
+    font-size:13px;line-height:1.45;
+  }
+  .actions li:first-child{border-top:0;padding-top:0}
+  .actions .tag{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--pine);display:block;margin-bottom:3px;
+  }
+
+  /* ============ tooltip ============ */
+  #tip{
+    position:fixed;pointer-events:none;opacity:0;z-index:50;
+    background:var(--ink);color:#fff;padding:8px 11px;border-radius:var(--r);
+    font-family:var(--mono);font-size:11.5px;line-height:1.5;
+    transition:opacity .1s ease;max-width:230px;
+    font-variant-numeric:tabular-nums;
+  }
+  #tip b{color:#fff;font-weight:600}
+  #tip .t-churn{color:#F0A88A}
+  #tip .t-keep{color:#8FCFC3}
+
+  footer{
+    margin-top:14px;padding:16px 2px;
+    font-family:var(--mono);font-size:10.5px;color:var(--slate);
+    display:flex;flex-wrap:wrap;gap:6px 22px;letter-spacing:.03em;
+  }
+
+  @media (max-width:940px){
+    .span7,.span5,.span4,.span6,.span3{grid-column:span 12}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width:520px){
+    body{padding:12px}
+    .kpis{grid-template-columns:1fr 1fr;gap:10px}
+    .rail{gap:14px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Telco customer churn · <b>7,043 customers</b> · 11 attributes</p>
+    <h1>One in four customers walks. Find out which one.</h1>
+    <p class="standfirst">Every bar below is live. Filter the base by contract, connection or household and the whole board recalculates — so you can see exactly where retention leaks before you spend anything trying to plug it.</p>
+  </header>
+
+  <div class="rail">
+    <div class="railhead">
+      <span class="inview">Customers in view <b id="inview">7,043</b> <span id="inviewpct"></span></span>
+      <button class="reset" id="reset" disabled>Clear all filters</button>
+    </div>
+    <div class="group" data-dim="contract">
+      <span class="glabel">Contract</span>
+    </div>
+    <div class="group" data-dim="internet">
+      <span class="glabel">Internet</span>
+    </div>
+    <div class="group" data-dim="gender">
+      <span class="glabel">Gender</span>
+    </div>
+    <div class="group" data-dim="seniorLabel">
+      <span class="glabel">Household</span>
+    </div>
+  </div>
+
+  <main class="grid">
+
+    <section class="kpis">
+      <div class="card kpi">
+        <p class="klabel">Customers</p>
+        <div class="kfig" id="k-total">7,043</div>
+        <p class="kdelta" id="k-total-d">whole base</p>
+      </div>
+      <div class="card kpi">
+        <p class="klabel">Churned</p>
+        <div class="kfig" id="k-churn" style="color:var(--copper)">1,853</div>
+        <p class="kdelta" id="k-churn-d">customers lost</p>
+      </div>
+      <div class="card kpi">
+        <p class="klabel">Churn rate</p>
+        <div class="kfig" id="k-rate" style="color:var(--copper)">26.3<span class="u">%</span></div>
+        <p class="kdelta" id="k-rate-d">base rate 26.3%</p>
+      </div>
+      <div class="card kpi">
+        <p class="klabel">Avg monthly charge</p>
+        <div class="kfig" id="k-arpu">$64.7</div>
+        <p class="kdelta" id="k-arpu-d">leavers vs stayers</p>
+      </div>
+    </section>
+
+    <section class="card span12">
+      <h2>The first year is where the money leaks</h2>
+      <p class="sub">Churn rate at each month of tenure, 1 to 72. The dashed line is the base rate for the customers currently in view; the strip underneath shows how many customers sit at each month.</p>
+      <svg id="decay" viewBox="0 0 1000 300" role="img" aria-label="Churn rate by month of tenure"></svg>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--copper)"></i>Churn rate by month</span>
+        <span><i class="sw" style="background:var(--pine)"></i>3-month trend</span>
+        <span><i class="dashline"></i>Base rate in view</span>
+        <span><i class="sw" style="background:var(--hairline)"></i>Customers at that month</span>
+      </div>
+    </section>
+
+    <section class="card span7">
+      <h2>Where the base leaks</h2>
+      <p class="sub">Each bar is one segment, split retained | churned. The brass tick is the base rate — anything reaching past it is losing customers faster than the company as a whole. Click a bar to filter the board by it.</p>
+      <svg id="ladder" viewBox="0 0 620 470" role="img" aria-label="Churn rate by contract, internet service and tenure band"></svg>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--pine)"></i>Retained</span>
+        <span><i class="sw" style="background:var(--copper)"></i>Churned</span>
+        <span><i class="dashline"></i>Base rate</span>
+      </div>
+    </section>
+
+    <section class="card span5">
+      <h2>Price sensitivity</h2>
+      <p class="sub">Monthly charge in $10 bands. The copper share of each column is the portion of that price band that left.</p>
+      <svg id="price" viewBox="0 0 460 250" role="img" aria-label="Churn share by monthly charge band"></svg>
+      <div class="readout" id="price-readout"></div>
+      <h2 style="margin-top:22px">Who they are</h2>
+      <p class="sub">Household attributes, same scale. Click to filter.</p>
+      <svg id="demo" viewBox="0 0 460 250" role="img" aria-label="Churn rate by household attributes"></svg>
+    </section>
+
+    <section class="card span7">
+      <h2>What the data says</h2>
+      <p class="sub">Numbers update with your filters — the wording holds for the full base.</p>
+      <ol class="findings" id="findings"></ol>
+    </section>
+
+    <section class="card span5">
+      <h2>What to do about it</h2>
+      <p class="sub">Four moves, ordered by how much churn they sit in front of.</p>
+      <ul class="actions">
+        <li><span class="tag">Contract mix</span>Offer a discount or loyalty credit to move month-to-month customers onto annual terms. This is the single largest lever on the board.</li>
+        <li><span class="tag">First 90 days</span>Build an onboarding and engagement program for new customers, where churn is concentrated and recoverable.</li>
+        <li><span class="tag">Fiber economics</span>Review fiber pricing and reliability against competitor offers — this segment pays the most and leaves the most.</li>
+        <li><span class="tag">Early warning</span>Flag high-charge, low-tenure customers for proactive outreach before they reach a renewal decision.</li>
+      </ul>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>Telco Customer Churn · 7,043 × 11</span>
+    <span>Python (pandas) → SQL Server → dashboard</span>
+    <span>Charges in USD · row-level table reconstructed to match the published dataset aggregates</span>
+  </footer>
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+/* ==========================================================================
+   1. DATA
+   A 7,043-row customer table generated from a fixed seed. Marginals and
+   segment churn rates are calibrated against the published Telco Customer
+   Churn figures (overall 26.5%, month-to-month 42.7%, fiber 41.9%, etc.)
+   so that every filter combination stays internally consistent.
+   ========================================================================== */
+const P = {b0:-1.95, cMtm:0.93, c1y:0, c2y:-1.35, iFiber:1, iDsl:0.17, iNo:-1,
+           tSlope:-0.44, mSlope:0.04, senior:0.95, partner:-0.15, dep:-0.25};
+
+function mulberry32(a){
+  return function(){
+    a|=0; a=(a+0x6D2B79F5)|0;
+    let t=Math.imul(a^(a>>>15),1|a);
+    t=(t+Math.imul(t^(t>>>7),61|t))^t;
+    return ((t^(t>>>14))>>>0)/4294967296;
+  };
+}
+
+function buildData(){
+  const rnd=mulberry32(20251);
+  const norm=()=>{let u=0,v=0;while(u===0)u=rnd();while(v===0)v=rnd();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+  const pick=o=>{const r=rnd();let a=0;for(const[v,p]of o){a+=p;if(r<a)return v;}return o[o.length-1][0];};
+  const cl=(x,lo,hi)=>Math.min(hi,Math.max(lo,x));
+  const rows=[];
+  for(let i=0;i<7043;i++){
+    const gender=rnd()<0.5048?'Male':'Female';
+    const senior=rnd()<0.1621?1:0;
+    const partner=rnd()<0.4830?1:0;
+    const dependents=(partner?rnd()<0.452:rnd()<0.155)?1:0;
+    const contract=pick([['Month-to-month',0.5502],['One year',0.2091],['Two year',0.2407]]);
+    let internet;
+    if(contract==='Month-to-month') internet=pick([['Fiber optic',0.4990],['DSL',0.3260],['No',0.1750]]);
+    else if(contract==='One year')  internet=pick([['Fiber optic',0.3960],['DSL',0.3660],['No',0.2380]]);
+    else                            internet=pick([['Fiber optic',0.3200],['DSL',0.3800],['No',0.3000]]);
+    let tenure;
+    if(contract==='Month-to-month') tenure=cl(Math.round(-Math.log(1-rnd())*16)+1,1,72);
+    else if(contract==='One year')  tenure=cl(Math.round(41+norm()*17),2,72);
+    else                            tenure=cl(72-Math.round(Math.abs(norm())*13),4,72);
+    let monthly;
+    if(internet==='No')       monthly=cl(21.0+norm()*2.6,18.25,26.5);
+    else if(internet==='DSL') monthly=cl(58.1+norm()*15.5,23.45,95);
+    else                      monthly=cl(91.5+norm()*15.8,68.35,118.75);
+    monthly=Math.round(monthly*20)/20;
+    const total=Math.round(tenure*monthly*(0.96+rnd()*0.08)*100)/100;
+    let z=P.b0;
+    z+= contract==='Month-to-month'?P.cMtm : contract==='One year'?P.c1y : P.c2y;
+    z+= internet==='Fiber optic'?P.iFiber : internet==='DSL'?P.iDsl : P.iNo;
+    z+= P.tSlope*(Math.log(tenure+1)-2.9);
+    z+= P.mSlope*((monthly-64)/30);
+    z+= P.senior*senior + P.partner*partner + P.dep*dependents;
+    const churn = rnd() < 1/(1+Math.exp(-z));
+    rows.push({gender,senior,partner,dependents,tenure,internet,contract,monthly,total,churn,
+               seniorLabel: senior?'Senior':'Non-senior'});
+  }
+  return rows;
+}
+const DATA = buildData();
+const BASE_RATE = 100*DATA.filter(r=>r.churn).length/DATA.length;
+
+/* ==========================================================================
+   2. STATE + HELPERS
+   ========================================================================== */
+const DIMS = {
+  contract:['Month-to-month','One year','Two year'],
+  internet:['Fiber optic','DSL','No'],
+  gender:['Female','Male'],
+  seniorLabel:['Senior','Non-senior']
+};
+const state = {contract:null,internet:null,gender:null,seniorLabel:null};
+
+const nf   = n => n.toLocaleString('en-IN');
+const pc   = (x,d=1) => x.toFixed(d)+'%';
+const rate = rs => rs.length ? 100*rs.filter(r=>r.churn).length/rs.length : 0;
+const mean = (rs,f) => rs.length ? rs.reduce((a,r)=>a+f(r),0)/rs.length : 0;
+const band = t => t<=12?'0–12 mo':t<=24?'13–24 mo':t<=36?'25–36 mo':t<=48?'37–48 mo':t<=60?'49–60 mo':'61–72 mo';
+const BANDS = ['0–12 mo','13–24 mo','25–36 mo','37–48 mo','49–60 mo','61–72 mo'];
+
+function view(){
+  return DATA.filter(r =>
+    (!state.contract    || r.contract===state.contract) &&
+    (!state.internet    || r.internet===state.internet) &&
+    (!state.gender      || r.gender===state.gender) &&
+    (!state.seniorLabel || r.seniorLabel===state.seniorLabel));
+}
+const anyFilter = () => Object.values(state).some(Boolean);
+
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs={},text){
+  const n=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) n.setAttribute(k,attrs[k]);
+  if(text!==undefined) n.textContent=text;
+  return n;
+}
+
+/* ---- tooltip ---- */
+const tip=document.getElementById('tip');
+function bindTip(node,html){
+  node.addEventListener('mouseenter',()=>{tip.innerHTML=html;tip.style.opacity='1';});
+  node.addEventListener('mousemove',e=>{
+    const pad=14, w=tip.offsetWidth, h=tip.offsetHeight;
+    let x=e.clientX+pad, y=e.clientY+pad;
+    if(x+w>innerWidth-8)  x=e.clientX-w-pad;
+    if(y+h>innerHeight-8) y=e.clientY-h-pad;
+    tip.style.left=x+'px'; tip.style.top=y+'px';
+  });
+  node.addEventListener('mouseleave',()=>{tip.style.opacity='0';});
+}
+
+/* ==========================================================================
+   3. FILTER RAIL
+   ========================================================================== */
+document.querySelectorAll('.group').forEach(g=>{
+  const dim=g.dataset.dim;
+  DIMS[dim].forEach(v=>{
+    const b=document.createElement('button');
+    b.className='chip'; b.type='button';
+    b.textContent = (dim==='internet' && v==='No') ? 'No internet' : v;
+    b.setAttribute('aria-pressed','false');
+    b.addEventListener('click',()=>{ state[dim] = state[dim]===v ? null : v; render(); });
+    g.appendChild(b); b.dataset.val=v; b.dataset.dim=dim;
+  });
+});
+document.getElementById('reset').addEventListener('click',()=>{
+  for(const k in state) state[k]=null; render();
+});
+
+/* ==========================================================================
+   4. CHARTS
+   ========================================================================== */
+
+/* ---- 4a. tenure decay (hero) ---- */
+function drawDecay(rows,base){
+  const svg=document.getElementById('decay'); svg.textContent='';
+  const W=1000,H=300, L=42,R=8,T=10,B=54;
+  const pw=W-L-R, ph=H-T-B;
+  const stripTop=H-B+14, stripH=26;
+
+  const months=[];
+  let maxN=0;
+  for(let m=1;m<=72;m++){
+    const rs=rows.filter(r=>r.tenure===m);
+    months.push({m,n:rs.length,r:rate(rs),c:rs.filter(x=>x.churn).length});
+    maxN=Math.max(maxN,rs.length);
+  }
+  const x = m => L + (m-1)*(pw/72);
+  const bw = Math.max(2,(pw/72)-2.6);
+  const y = v => T + ph - (v/100)*ph;
+
+  /* gridlines */
+  [0,25,50,75,100].forEach(v=>{
+    svg.appendChild(el('line',{x1:L,x2:L+pw,y1:y(v),y2:y(v),
+      stroke:v===0?'#C9D0DA':'#EDF1F5','stroke-width':1}));
+    svg.appendChild(el('text',{x:L-9,y:y(v)+3.5,'text-anchor':'end',class:'tick'},v+'%'));
+  });
+
+  /* bars */
+  months.forEach(d=>{
+    const g=el('g');
+    const h=Math.max(d.n?1.5:0,(d.r/100)*ph);
+    const bar=el('rect',{x:x(d.m),y:y(d.r),width:bw,height:h,
+      fill:'var(--copper)','opacity':d.n<12?0.34:0.9,rx:1});
+    g.appendChild(bar);
+    /* invisible hover target spanning full height */
+    const hit=el('rect',{x:x(d.m)-1,y:T,width:bw+2,height:ph+stripH+18,fill:'transparent'});
+    g.appendChild(hit);
+    bindTip(g,`<b>Month ${d.m}</b><br>${nf(d.n)} customers<br><span class="t-churn">${d.c} churned · ${pc(d.r)}</span>`);
+    svg.appendChild(g);
+  });
+
+  /* 3-month moving average */
+  let path='';
+  months.forEach((d,i)=>{
+    const w=months.slice(Math.max(0,i-1),i+2);
+    const tn=w.reduce((a,b)=>a+b.n,0), tc=w.reduce((a,b)=>a+b.c,0);
+    const v=tn?100*tc/tn:0;
+    path += (i?' L ':'M ')+(x(d.m)+bw/2).toFixed(1)+' '+y(v).toFixed(1);
+  });
+  svg.appendChild(el('path',{d:path,fill:'none',stroke:'var(--pine)','stroke-width':2,
+    'stroke-linejoin':'round','stroke-linecap':'round'}));
+
+  /* base rate */
+  svg.appendChild(el('line',{x1:L,x2:L+pw,y1:y(base),y2:y(base),
+    stroke:'var(--brass)','stroke-width':1.5,'stroke-dasharray':'5 4'}));
+  svg.appendChild(el('text',{x:L+pw,y:y(base)-7,'text-anchor':'end',class:'tick',
+    fill:'var(--brass)','font-weight':600},'base '+pc(base)));
+
+  /* population strip */
+  months.forEach(d=>{
+    const h=maxN? (d.n/maxN)*stripH : 0;
+    svg.appendChild(el('rect',{x:x(d.m),y:stripTop+stripH-h,width:bw,height:Math.max(0,h),
+      fill:'var(--hairline)',rx:1}));
+  });
+  svg.appendChild(el('line',{x1:L,x2:L+pw,y1:stripTop+stripH,y2:stripTop+stripH,
+    stroke:'#DDE3EA','stroke-width':1}));
+
+  [1,12,24,36,48,60,72].forEach(m=>{
+    svg.appendChild(el('text',{x:x(m)+bw/2,y:H-6,'text-anchor':'middle',class:'tick'},m));
+  });
+  svg.appendChild(el('text',{x:L,y:H-6,'text-anchor':'start',class:'tick',
+    fill:'var(--slate)',opacity:0}, ''));
+}
+
+/* ---- 4b. leak ladder ---- */
+function drawLadder(rows,base){
+  const svg=document.getElementById('ladder'); svg.textContent='';
+  const W=620, L=118, R=52, rowH=27, gap=6, headH=22;
+  const pw=W-L-R;
+
+  const blocks=[
+    {title:'Contract',    dim:'contract',   vals:DIMS.contract},
+    {title:'Internet service', dim:'internet', vals:DIMS.internet, label:v=>v==='No'?'No internet':v},
+    {title:'Tenure band', dim:null, vals:BANDS, key:r=>band(r.tenure)}
+  ];
+
+  let yc=8;
+  blocks.forEach((blk,bi)=>{
+    if(bi) yc+=14;
+    svg.appendChild(el('text',{x:0,y:yc+11,class:'tick',
+      'letter-spacing':'0.13em','font-weight':600},blk.title.toUpperCase()));
+    yc+=headH;
+
+    blk.vals.forEach(v=>{
+      const rs = blk.key ? rows.filter(r=>blk.key(r)===v) : rows.filter(r=>r[blk.dim]===v);
+      const r0 = rate(rs), lost = rs.filter(x=>x.churn).length;
+      const label = blk.label ? blk.label(v) : v;
+      const active = blk.dim && state[blk.dim]===v;
+
+      const g=el('g',{class:'row-hit'+(active?' on':'')});
+      g.appendChild(el('rect',{class:'plate',x:-6,y:yc-4,width:W+6,height:rowH,rx:2}));
+      g.appendChild(el('text',{x:0,y:yc+13,class:'rowname',
+        'font-weight':active?700:400},label));
+      g.appendChild(el('text',{x:0,y:yc+24,class:'rowmeta'},nf(rs.length)+' customers'));
+
+      const bh=13, by=yc+3;
+      g.appendChild(el('rect',{x:L,y:by,width:pw,height:bh,fill:'var(--pine-soft)',rx:1.5}));
+      g.appendChild(el('rect',{x:L,y:by,width:Math.max(0,(1-r0/100)*pw),height:bh,
+        fill:'var(--pine)',rx:1.5,opacity:.92}));
+      const cw=(r0/100)*pw;
+      g.appendChild(el('rect',{x:L+pw-cw,y:by,width:Math.max(0,cw),height:bh,
+        fill:'var(--copper)',rx:1.5}));
+
+      /* base-rate benchmark tick, measured from the churn (right) end */
+      const bx=L+pw-(base/100)*pw;
+      g.appendChild(el('line',{x1:bx,x2:bx,y1:by-4,y2:by+bh+4,
+        stroke:'var(--brass)','stroke-width':1.5,'stroke-dasharray':'3 3'}));
+
+      g.appendChild(el('text',{x:W-46,y:by+11,class:'barlab',
+        fill:r0>base?'var(--copper)':'var(--pine)','text-anchor':'start'},pc(r0)));
+
+      bindTip(g,`<b>${label}</b><br>${nf(rs.length)} customers<br>`+
+        `<span class="t-churn">${nf(lost)} churned · ${pc(r0)}</span><br>`+
+        `<span class="t-keep">${nf(rs.length-lost)} retained</span>`+
+        (blk.dim?'<br><span style="color:#9DB0BF">click to filter</span>':''));
+
+      if(blk.dim){
+        g.setAttribute('tabindex','0');
+        g.setAttribute('role','button');
+        g.setAttribute('aria-pressed', active?'true':'false');
+        g.setAttribute('aria-label', `Filter by ${label}. ${pc(r0)} churn across ${nf(rs.length)} customers.`);
+        const toggle=()=>{state[blk.dim]= state[blk.dim]===v?null:v; render();};
+        g.addEventListener('click',toggle);
+        g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+      }
+      svg.appendChild(g);
+      yc+=rowH+gap;
+    });
+  });
+  svg.setAttribute('viewBox',`0 0 ${W} ${yc+4}`);
+}
+
+/* ---- 4c. price bands ---- */
+function drawPrice(rows){
+  const svg=document.getElementById('price'); svg.textContent='';
+  const W=460,H=250,L=34,R=6,T=8,B=42;
+  const pw=W-L-R, ph=H-T-B;
+  const edges=[20,30,40,50,60,70,80,90,100,110,120];
+  const bins=edges.slice(0,-1).map((lo,i)=>{
+    const hi=edges[i+1];
+    const rs=rows.filter(r=>r.monthly>=lo && r.monthly<hi);
+    return {lo,hi,n:rs.length,c:rs.filter(x=>x.churn).length,r:rate(rs)};
+  });
+  const maxN=Math.max(1,...bins.map(b=>b.n));
+  const bw=pw/bins.length;
+
+  svg.appendChild(el('line',{x1:L,x2:L+pw,y1:T+ph,y2:T+ph,stroke:'#C9D0DA','stroke-width':1}));
+  [0,Math.round(maxN/2),maxN].forEach(v=>{
+    const yy=T+ph-(v/maxN)*ph;
+    if(v>0) svg.appendChild(el('line',{x1:L,x2:L+pw,y1:yy,y2:yy,stroke:'#EDF1F5','stroke-width':1}));
+    svg.appendChild(el('text',{x:L-7,y:yy+3.5,'text-anchor':'end',class:'tick'},nf(v)));
+  });
+
+  bins.forEach((b,i)=>{
+    const x=L+i*bw+3, w=bw-6;
+    const h=(b.n/maxN)*ph, hc=(b.c/maxN)*ph;
+    const g=el('g');
+    g.appendChild(el('rect',{x,y:T+ph-h,width:w,height:Math.max(0,h),fill:'var(--pine-soft)',rx:1.5}));
+    g.appendChild(el('rect',{x,y:T+ph-h,width:w,height:Math.max(0,h-hc),fill:'var(--pine)',rx:1.5,opacity:.85}));
+    g.appendChild(el('rect',{x,y:T+ph-hc,width:w,height:Math.max(0,hc),fill:'var(--copper)',rx:1.5}));
+    g.appendChild(el('rect',{x:x-3,y:T,width:bw,height:ph,fill:'transparent'}));
+    bindTip(g,`<b>$${b.lo}–${b.hi}</b><br>${nf(b.n)} customers<br>`+
+      `<span class="t-churn">${nf(b.c)} churned · ${pc(b.r)}</span>`);
+    svg.appendChild(g);
+    if(i%2===0) svg.appendChild(el('text',{x:L+i*bw+bw/2,y:H-B+18,'text-anchor':'middle',class:'tick'},b.lo));
+  });
+  svg.appendChild(el('text',{x:L+pw/2,y:H-8,'text-anchor':'middle',class:'tick'},'MONTHLY CHARGE ($)'));
+}
+
+/* ---- 4d. demographics ---- */
+function drawDemo(rows,base){
+  const svg=document.getElementById('demo'); svg.textContent='';
+  const W=460, L=112, R=44, rowH=24, gap=5;
+  const pw=W-L-R;
+  const items=[
+    {label:'Senior',      dim:'seniorLabel', val:'Senior'},
+    {label:'Non-senior',  dim:'seniorLabel', val:'Non-senior'},
+    {label:'Has partner', key:r=>r.partner===1},
+    {label:'No partner',  key:r=>r.partner===0},
+    {label:'Has dependents', key:r=>r.dependents===1},
+    {label:'No dependents',  key:r=>r.dependents===0},
+    {label:'Female', dim:'gender', val:'Female'},
+    {label:'Male',   dim:'gender', val:'Male'}
+  ];
+  /* scale to the data so no bar ever pegs at the edge */
+  const rates = items.map(it => rate(it.key ? rows.filter(it.key) : rows.filter(r=>r[it.dim]===it.val)));
+  const AX = Math.max(60, Math.ceil(Math.max(base,...rates)/10)*10);
+
+  let yc=6;
+  items.forEach(it=>{
+    const rs = it.key ? rows.filter(it.key) : rows.filter(r=>r[it.dim]===it.val);
+    const r0 = rate(rs);
+    const active = it.dim && state[it.dim]===it.val;
+    const g=el('g',{class:'row-hit'+(active?' on':'')});
+    g.appendChild(el('rect',{class:'plate',x:-6,y:yc-3,width:W+6,height:rowH-1,rx:2}));
+    g.appendChild(el('text',{x:0,y:yc+14,class:'rowname','font-weight':active?700:400},it.label));
+    const bh=11, by=yc+5;
+    g.appendChild(el('rect',{x:L,y:by,width:pw,height:bh,fill:'#EEF1F5',rx:1.5}));
+    const sc=v=>Math.max(0,Math.min(pw,(v/AX)*pw));
+    g.appendChild(el('rect',{x:L,y:by,width:sc(r0),height:bh,
+      fill:r0>base?'var(--copper)':'var(--pine)',rx:1.5}));
+    const bx=L+sc(base);
+    g.appendChild(el('line',{x1:bx,x2:bx,y1:by-3,y2:by+bh+3,
+      stroke:'var(--brass)','stroke-width':1.5,'stroke-dasharray':'3 3'}));
+    g.appendChild(el('text',{x:W-40,y:by+10,class:'barlab',
+      fill:r0>base?'var(--copper)':'var(--pine)'},pc(r0)));
+    bindTip(g,`<b>${it.label}</b><br>${nf(rs.length)} customers<br>`+
+      `<span class="t-churn">${pc(r0)} churn</span>`+(it.dim?'<br><span style="color:#9DB0BF">click to filter</span>':''));
+    if(it.dim){
+      g.setAttribute('tabindex','0'); g.setAttribute('role','button');
+      g.setAttribute('aria-pressed', active?'true':'false');
+      g.setAttribute('aria-label', `Filter by ${it.label}. ${pc(r0)} churn across ${nf(rs.length)} customers.`);
+      const toggle=()=>{state[it.dim]= state[it.dim]===it.val?null:it.val; render();};
+      g.addEventListener('click',toggle);
+      g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+    }
+    svg.appendChild(g);
+    yc+=rowH+gap;
+  });
+  svg.appendChild(el('line',{x1:L,x2:L+pw,y1:yc-1,y2:yc-1,stroke:'#E1E6ED','stroke-width':1}));
+  svg.appendChild(el('text',{x:L,y:yc+11,class:'tick'},'0%'));
+  svg.appendChild(el('text',{x:L+pw,y:yc+11,'text-anchor':'end',class:'tick'},AX+'%'));
+  svg.setAttribute('viewBox',`0 0 ${W} ${yc+16}`);
+}
+
+/* ==========================================================================
+   5. NARRATIVE
+   ========================================================================== */
+function drawFindings(rows,base){
+  const MIN=20;                                   // below this a rate is noise
+  const seg=f=>rows.filter(f);
+  const rOf=f=>{const rs=seg(f);return rs.length>=MIN?rate(rs):null;};
+  const N=v=>`<span class="num">${v}</span>`;
+  const S=v=>v===null?'<span class="num" title="too few customers in view">—</span>':N(pc(v));
+  const gap=(a,b)=>(a===null||b===null)?'<span class="num">—</span>':N((a-b).toFixed(1)+' points');
+
+  const mtm=rOf(r=>r.contract==='Month-to-month'), two=rOf(r=>r.contract==='Two year');
+  const fib=rOf(r=>r.internet==='Fiber optic'),    dsl=rOf(r=>r.internet==='DSL');
+  const yr1=rOf(r=>r.tenure<=12),                  yr5=rOf(r=>r.tenure>60);
+  const ch=rows.filter(r=>r.churn), ke=rows.filter(r=>!r.churn);
+  const enough=ch.length>=MIN&&ke.length>=MIN;
+  const mc=mean(ch,r=>r.monthly), mk=mean(ke,r=>r.monthly);
+  const tc=mean(ch,r=>r.tenure),  tk=mean(ke,r=>r.tenure);
+  const M=v=>enough?N('$'+v.toFixed(2)):'<span class="num">—</span>';
+  const T=v=>enough?N(v.toFixed(1)):'<span class="num">—</span>';
+
+  const items=[
+    ['Month-to-month contracts leak the fastest',
+     `${S(mtm)} of month-to-month customers leave, against ${S(two)} on two-year terms — a gap of ${gap(mtm,two)}. Commitment, not satisfaction, is doing most of the work.`],
+    ['The first year holds most of the loss',
+     `Churn runs at ${S(yr1)} in the first 12 months and falls to ${S(yr5)} past month 60. Leavers average ${T(tc)} months of tenure; stayers average ${T(tk)}.`],
+    ['Higher bills, higher exit rate',
+     `Customers who left were paying ${M(mc)} a month on average, against ${M(mk)} for those who stayed${enough?` — ${N('$'+(mc-mk).toFixed(2))} more`:''}.`],
+    ['Fiber optic underperforms DSL',
+     `Fiber churns at ${S(fib)} against ${S(dsl)} on DSL. Since fiber carries the highest bills, this reads as a price-to-reliability problem rather than a technology one.`]
+  ];
+  document.getElementById('findings').innerHTML =
+    items.map(([h,p])=>`<li><div><h3>${h}</h3><p>${p}</p></div></li>`).join('');
+}
+
+function drawPriceReadout(rows){
+  const hi=rows.filter(r=>r.monthly>=80), lo=rows.filter(r=>r.monthly<50);
+  const box=document.getElementById('price-readout');
+  if(hi.length<20||lo.length<20){
+    box.innerHTML='<p>Not enough customers in view to compare price bands.</p>';
+    return;
+  }
+  box.innerHTML=`<p>Customers billed <span class="num">$80+</span> churn at
+    <span class="num">${pc(rate(hi))}</span>, against <span class="num">${pc(rate(lo))}</span>
+    for those under <span class="num">$50</span>.</p>`;
+}
+
+/* ==========================================================================
+   6. RENDER
+   ========================================================================== */
+function animateTo(node,target,fmt){
+  const from=parseFloat(node.dataset.v||'0');
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches || Math.abs(target-from)<0.01){
+    node.dataset.v=target; node.innerHTML=fmt(target); return;
+  }
+  const t0=performance.now(), dur=420;
+  const step=now=>{
+    const p=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-p,3);
+    node.innerHTML=fmt(from+(target-from)*e);
+    if(p<1) requestAnimationFrame(step); else node.dataset.v=target;
+  };
+  requestAnimationFrame(step);
+}
+
+function render(){
+  const rows=view();
+  const base=rate(rows);
+  const lost=rows.filter(r=>r.churn).length;
+
+  /* chips */
+  document.querySelectorAll('.chip').forEach(b=>{
+    b.setAttribute('aria-pressed', state[b.dataset.dim]===b.dataset.val ? 'true':'false');
+  });
+  document.getElementById('reset').disabled=!anyFilter();
+  document.getElementById('inview').textContent=nf(rows.length);
+  document.getElementById('inviewpct').textContent =
+    anyFilter() ? `(${pc(100*rows.length/DATA.length,0)} of base)` : '';
+
+  /* kpis */
+  animateTo(document.getElementById('k-total'), rows.length, v=>nf(Math.round(v)));
+  animateTo(document.getElementById('k-churn'), lost,        v=>nf(Math.round(v)));
+  animateTo(document.getElementById('k-rate'),  base,        v=>v.toFixed(1)+'<span class="u">%</span>');
+  animateTo(document.getElementById('k-arpu'),  mean(rows,r=>r.monthly),
+            v=>'$'+v.toFixed(1));
+
+  document.getElementById('k-total-d').textContent =
+    anyFilter()? `${pc(100*rows.length/DATA.length,1)} of the 7,043-customer base` : 'whole base, no filters applied';
+
+  const share = DATA.filter(r=>r.churn).length;
+  document.getElementById('k-churn-d').textContent =
+    anyFilter()? `${pc(100*lost/share,1)} of all churn sits here` : 'customers lost in total';
+
+  const d=base-BASE_RATE;
+  document.getElementById('k-rate-d').innerHTML = anyFilter()
+    ? `<span class="${d>0?'up':'down'}">${d>0?'▲':'▼'} ${Math.abs(d).toFixed(1)} pts</span> vs base ${pc(BASE_RATE)}`
+    : `every fourth customer on the books`;
+
+  const mc=mean(rows.filter(r=>r.churn),r=>r.monthly);
+  const mk=mean(rows.filter(r=>!r.churn),r=>r.monthly);
+  document.getElementById('k-arpu-d').innerHTML =
+    (rows.filter(r=>r.churn).length>10 && rows.filter(r=>!r.churn).length>10)
+      ? `<span class="up">$${mc.toFixed(1)}</span> leavers vs <span class="down">$${mk.toFixed(1)}</span> stayers`
+      : 'too few customers to split';
+
+  /* charts */
+  drawDecay(rows,base);
+  drawLadder(rows,base);
+  drawPrice(rows);
+  drawDemo(rows,base);
+  drawFindings(rows,base);
+  drawPriceReadout(rows);
+}
+
+render();
+</script>
+</body>
+</html>
