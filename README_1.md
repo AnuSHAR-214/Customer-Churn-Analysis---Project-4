@@ -2,6 +2,12 @@
 
 An end-to-end data analytics project that explores **why telecom customers leave** — cleaned and analysed in Python, aggregated in SQL Server, and visualised in Tableau.
 
+## Live Dashboard
+
+**[Open the interactive churn dashboard](https://anushar-214.github.io/Customer-Churn-Analysis---Project-4/)**
+
+Hosted on GitHub Pages. Every KPI and chart recalculates live as you filter the customer base by contract, internet service, gender and household.
+
 ---
 
 ## Tech Stack
